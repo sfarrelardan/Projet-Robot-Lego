@@ -1,11 +1,5 @@
 # Projet Robot Lego
 
-## Author
-
-- First Name: Farrel
-- Last Name: SUSILO
-- Robot Name: Simplet
-
 # How to use the robot
 Make sure to compile the repository on the host and local.
 Compiling on the host is simple. Run the following command:
