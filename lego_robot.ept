@@ -1,0 +1,761 @@
+(* IMPORTS *)
+open Utils
+open Globals
+
+(*------------------------------------------------------------------------------
+----------------------------------- SUB NODES ----------------------------------
+--------------------------------------------------------------------------------*)
+
+(* Command Interpreter *)
+-- The command interpreter adjust the speed and direction of the two front motors based on a direction input
+-- There are four possible inputs:
+-- 									* FORTH : move forward;
+-- 									* LEFT : turn left;
+-- 									* RIGHT : turn right;
+-- 									* BACK : move backwards
+
+node command (
+
+	-- command received from the global variable type wheel_command defined in globals.ept
+	command_input : wheel_command
+
+) returns (
+
+	-- actuation to the front motors
+	clockwise_A : bool; counterclockwise_A : bool; value_A : int; -- Right motor
+	clockwise_B : bool; counterclockwise_B : bool; value_B : int;  -- Left motor
+
+);
+
+let 
+	-- switch structure to decide what to do in case of a command
+	switch command_input
+	| STOP
+		do
+			-- Left and right wheels do not move 
+			clockwise_A = false;
+			counterclockwise_A = false;
+			value_A = 0 ;
+
+			clockwise_B = false;
+			counterclockwise_B = false;
+			value_B = 0;
+
+	| FORTH
+		do
+		--  Adjust direction and speed of both motors to move forward.
+		--  Use forth_wheel_speed for speed value.
+			clockwise_A = true;
+			counterclockwise_A = false;
+			value_A = forth_wheel_speed;
+
+			clockwise_B = true;
+			counterclockwise_B = false;
+			value_B = forth_wheel_speed;
+
+	| BACK
+		do
+		--  Adjust direction and speed of both motors to move backwards
+		--  Use back_wheel_speed for speed value.
+			clockwise_A = false;
+			counterclockwise_A = true;
+			value_A = back_wheel_speed ;
+
+			clockwise_B = false;
+			counterclockwise_B = true;
+			value_B = back_wheel_speed;
+
+	| RIGHT
+		do
+
+		--  Adjust left wheel to move counterclockwise and right wheel clockwise, adjust speed of both motors.
+		--  Use turn_wheel_speed for speed value
+			clockwise_A = false;
+			counterclockwise_A = true;
+			value_A = turn_wheel_speed ;
+
+			clockwise_B = true;
+			counterclockwise_B = false;
+			value_B = turn_wheel_speed;
+
+	| LEFT
+		do
+
+		--  Adjust left wheel to move clockwise and right wheel counterclockwise, adjust speed of both motors.
+		--  Use turn_wheel_speed for speed value
+			clockwise_A = true;
+			counterclockwise_A = false;
+			value_A = turn_wheel_speed ;
+
+			clockwise_B = false;
+			counterclockwise_B = true;
+			value_B = turn_wheel_speed;
+	end
+tel
+
+(* END *)
+
+(* Head Command Interpreter *)
+-- The head command interpreter adjust the angular position of the head.
+-- There are four possible inputs:
+-- 									* H_LEFT : move head anticklockwise by 45 degrees;
+-- 									* H_MIDDLE : move head to the centre;
+-- 									* H_RIGHT : move head clockwise by 45 degrees;
+-- Note I'm not sure if the clockwise and anticlockwise commands affect the motor direction.
+-- I tested it once and it doesn't seem to. But I haven't done more tests so I left it as is.
+-- Regardless this node still works as intended.
+
+node head_cmd (
+
+	-- Head position input based on the global variable type head_position defined in globals.ept
+	head_command : head_position;
+
+) returns (
+
+	-- Output the motor direction and the angle value
+	clockwise_C : bool; -- not sure if this affects the motor direction
+	counterclockwise_C : bool; -- not sure if this affects the motor direction
+	value_C : int;
+
+)
+
+let
+	-- Same switch structure used in command node
+	switch head_command
+	| H_LEFT
+		do
+			clockwise_C = true; -- not sure if this affects the motor direction
+			counterclockwise_C = false; -- not sure if this affects the motor direction
+			value_C = head_left_angle; -- left angle value defined in globals.ept
+	| H_MIDDLE
+		do
+			clockwise_C = false; -- not sure if this affects the motor direction
+			counterclockwise_C = true; -- not sure if this affects the motor direction
+			value_C = head_front_angle; -- middle angle value defined in globals.ept
+	| H_RIGHT
+		do
+			clockwise_C = false; -- not sure if this affects the motor direction
+			counterclockwise_C = true; -- not sure if this affects the motor direction
+			value_C = head_right_angle; -- right angle value defined in globals.ept
+	end
+
+tel
+
+(* END *)
+
+(* QUESTION 1: The robot goes forward for a while and changes direction: backward, right and left, and
+starts again. *)
+
+-- Node m1 doesn't need to take any input because it is just the default behaviour of the robot.
+-- It calculates / decide what wheel command should be used to control the front motors based on possible five states:
+--																					 									* FORTH : move forward;
+--																					 									* LEFT : turn left;
+--																					 									* RIGHT : turn right;
+--																					 									* BACK : move backwards;
+--																					 									* STOP : no movement
+
+node m1 (
+
+	-- No input, because we are only manipulating the motors
+
+)
+returns (
+
+	-- Command output for the command interpretter
+	command : wheel_command;
+	
+	);
+
+var last timer: int;
+
+(* -- Program starts here -- *)
+let
+	automaton
+		-- Initial state of the robot, it should be at rest. 
+		state Stop
+			do
+				-- No movement
+				command = STOP;
+
+				-- Timer to guard the state
+				-- At each cycle, one count is added
+				timer = 0 -> last timer + 1;
+				-- Until the duration value is reached then the robot should move forward
+				-- Use then because we want to reset the counter each time we change state
+				until timer >= 50 then Forth
+
+		-- First movement, forwards
+		state Forth
+			do
+			--  Adjust direction and speed of both motors to move forward.
+			--  Use forth_wheel_speed for speed value.
+				command = FORTH;
+
+			--  Same timer logic, except we maintain the state until max_forth_duration
+				timer = 0 -> last timer + 1;
+				until timer >= max_forth_duration then Back
+
+		-- Second movement, backwards
+		state Back
+			do
+			--  Adjust direction and speed of both motors to move backwards
+			--  Use back_wheel_speed for speed value.
+				command = BACK;
+
+			--  Same timer logic, except we maintain the state until back_duration
+				timer = 0 -> last timer + 1;
+				until timer >= back_duration then Right
+
+		-- Third movement, turn right
+		state Right
+			do
+
+			--  Adjust left wheel to move counterclockwise and right wheel clockwise, adjust speed of both motors.
+			--  Use turn_wheel_speed for speed value
+				command = RIGHT;
+
+			--  Same timer logic, except we maintain the state until turn_duration
+				timer = 0 -> last timer + 1;
+				until timer >= turn_duration then Left
+
+		-- Last movement, turn left, then back to stop
+		state Left
+			do
+
+			--  Adjust left wheel to move clockwise and right wheel counterclockwise, adjust speed of both motors.
+			--  Use turn_wheel_speed for speed value
+				command = LEFT;
+
+			--  Same timer logic, except we maintain the state until turn_duration
+				timer = 0 -> last timer + 1;
+				until timer >= turn_duration then Stop
+	end
+tel;
+
+(* END *)
+
+(* QUESTION 2: Add the color sensor: the Robot stops when it crosses a dark zone. *)
+
+-- Node m2 only calculate whether the robot should stop (output) when the colour sensor is blocked (input)
+
+node m2 (
+
+-- Colour sensor as input
+sensor_2 : int
+
+) returns (
+
+-- Stop command
+	stop: bool; 
+
+);
+
+let
+	automaton
+
+		-- When there is nothing blocking the light sensor
+		state Clear
+			do stop = false;
+			-- Sensor is considered blocked when value is 10 or below
+			until sensor_2 <= 10 then Blocked
+			
+		-- When sensor is blocked
+		state Blocked
+			do stop = true;
+			-- Sensor is no longer blocked when value is more than 10
+			until sensor_2 > 10 then Clear
+	end
+tel
+
+(* END *)
+
+(* QUESTION 3: Add Left and Right touch sensors. *)
+
+-- Node m3 detects when the touch sensors (input) have been touched. Based on which sensor (left or right) it calculates which way
+-- the robot should turn to avoid collision. In general, when either of the sensors detect a collision, the robot must stop
+-- wait until it has fully stopped. Then reverse and turn right if the left sensor was touched or turn left if the right sensor was touched.
+
+node m3 (
+
+	-- Touch sensors
+	sensor_1 : bool; -- Right touch sensor
+	sensor_4 : bool; -- Left touch sensor
+
+	-- Motor speed sensors to detect if the robot has fully stopped
+	motor_speed_sensor_A : int; -- Right front motor speed sensor
+	motor_speed_sensor_B : int; -- Left front motor speed sensor
+
+) returns (
+
+	-- Command to turn the robot
+	last command : wheel_command;
+
+	-- Flag to tell that the node has finished its routine
+	ok : bool;
+
+);
+
+-- Some internal variables.
+var last right : bool; -- Flag to tell that the robot's right touch sensor has been touched
+	last left : bool;  -- Flag to tell that the robot's left touch sensor has been touched
+	last reverse : bool;  -- Flag to tell the robot has done the reverse routine
+	last timer : int;  -- Timer to determine the duration it should follow when turning, similar seen in the node m1
+	last tmp_done : bool; -- A temporary variable to carry the variable done
+
+(* -- Program starts here -- *)
+let
+	automaton
+		-- The robot must stop the moment it detects collision on one of the touch sensors
+		state Stop
+			do
+				-- Stop command to stop the robot
+				command = STOP;
+
+				-- Detect immediately which sensor has been touched
+				right = switch_RS(tmp_done, rising_edge(sensor_1)); -- detect collision on right touch sensor
+				left  = switch_RS(tmp_done, rising_edge(sensor_4)); -- detect collision on left touch sensor
+
+				-- State the value of remaining flags to avoid unbounded errors
+				reverse = false -> last reverse;
+				tmp_done = false -> last tmp_done;
+				ok = false;
+
+				-- Guard to wait until the robot fully stops before going to the next state
+				until (motor_speed_sensor_A = 0) and (motor_speed_sensor_B = 0) continue Decision
+		
+		-- Decision state to decide which direction the robot should turn based on which touch sensor collided
+		state Decision
+			do
+				-- Hold last known command
+				command = last command;
+
+				-- State the value of each flag. Should be the last known value because this is the decision state.
+				reverse = last reverse;
+				right = last right;
+				left = last left;
+				tmp_done = last tmp_done;
+				ok = false; -- no last on ok variable, so should state explicitly
+
+				-- tmp_done is used to tell that that the robot has turned so it can go to the clear state
+				until tmp_done then Clear
+				| reverse = false then Reverse -- If the robot hasn't reversed yet, it should move backwards
+				| reverse and right then Left -- If the robot has turned and the right sensor was flagged, it should turn left
+				| reverse and left then Right -- If the robot has turned and the left sensor was flagged, it should turn right
+
+		-- The state that the robot is moving backwards
+		state Reverse
+			do
+				-- Send the command to turn back
+				command = BACK;
+
+				-- Assign some flags
+				reverse = true; -- Set reverse to true because it has completed the action
+				-- Since tmp_done, right and left flags are not needed in this state, it doesn't need to be assigned
+				ok = false; -- Since ok has no memory so it must be stated explicitly
+				
+				-- Reverse until the dureation of the reverse direction mentioned in globals.ept
+				timer = 0 -> last timer + 1;
+				until timer >= back_duration continue Stop
+		
+		-- Turn left state if right sensor was touched
+		state Left
+			do
+				-- Send left direction command
+				command = LEFT;
+
+				-- Now that all the other actions has been executed, they are assigned as false
+				reverse = false;
+				right = false;
+
+				-- tmp_done is true because all necessary actions has been done
+				tmp_done = true;
+
+				-- Still need to assign ok as false
+				ok = false;
+
+				-- Turn for a duration assigned in globals.ept
+				timer = 0 -> last timer + 1;
+				-- Stop the robot from moving once duration is elapsed
+				until timer >= turn_duration continue Stop
+		
+		-- Turn right state if left sensor was touched
+		state Right
+			do
+
+				-- Send the right direction command
+				command = RIGHT;
+
+				-- Now that all the other actions has been executed, they are assigned as false
+				reverse = false;
+				left = false;
+
+				-- tmp_done is true because all necessary actions has been done
+				tmp_done = true;
+
+				-- Still need to assign ok as false
+
+				ok = false;
+
+				-- Turn for a duration assigned in globals.ept
+				timer = 0 -> last timer + 1;
+				-- Stop the robot from moving once duration is elapsed
+				until timer >= turn_duration continue Stop
+
+		-- Final state / done state once all actions has been executed
+		state Clear
+			do
+				
+				-- State last command because it is ouput and has no memory. Should be the stop command.
+				command = last command;
+				-- Now that the drone is done with all actions, it should be fine to send the ok flag as an output.
+				ok = last tmp_done;
+
+				-- Assert other flags again
+				right = false;
+				left  = false;
+				reverse = false;
+				tmp_done = false;
+
+			-- Go back to the stop if the sensor was touched again
+			until sensor_1 or sensor_4 then Stop
+	end
+tel
+
+(* END *)
+
+(* QUESTION 4: Add Left and Right touch sensors. *)
+-- The node m4 is calculates which direction the drone should turn (output) in case its ultrasonic sensors (input) detects an obstacle nearby.
+-- The routine is almost similar to m3, so I repeated the structure in this state.
+-- If the sensor reads an object is in front of it based on the 20cm threshold defined in globals.ept, the drone should stop.
+-- Then it should turn its head to the right, then measure the distance of the closest obstacle at that direction.
+-- Then turn to the left and do the same.
+-- Finally, it compares which has the larger distance and turn towards that direction.
+
+-- This routine was programmed very quickly, so there are definitely some redundant lines. But the program worked as intended so I did not modify it
+-- after the demonstration.
+
+node m4 (
+
+	-- Input from the ultrasonic sensors
+	sensor_3 : int;
+
+	-- Front motor speed sensors for right and left sensors. Again used to ensure the robot fully stops.
+	motor_speed_sensor_A : int; -- Right front motor speed sensor
+	motor_speed_sensor_B : int; -- Left front motor speed sensor
+
+) returns (
+
+	-- Output comands
+	last command : wheel_command; -- Command for the front motors
+	last head_command : head_position; -- Command for the head motor
+
+	-- Output flag
+	ok : bool; -- Flag to inform that the routine is done
+
+);
+
+-- Some internal variables
+var last right : bool; -- Flag to tell the robot it should turn right
+	last left : bool; -- Flag to tell the robot it should turn left
+	last distance_r : int; -- Variable to store the distance measured 45 defrees to the right of the robot
+	last distance_l : int; -- Variable to store the distance measured 45 degrees to the left of the robot
+	last timer : int;
+
+(* -- Program starts here -- *)
+let
+	automaton
+		
+		-- Initial state, the robot should stop first
+		state Stop
+			do
+				-- Send stop command
+				command = STOP;
+				-- The head should still be in the middle
+				head_command = H_MIDDLE;
+
+				-- Assign values to flag
+				left = false; -- Initial value of left
+				right = false; -- Initial value of right
+				ok = false; -- ok should be false because node routine is not done
+
+				-- Wait until robot is fully stationed before making a decision
+				until (motor_speed_sensor_A = 0) and (motor_speed_sensor_B = 0) continue Decision
+		
+		-- Decision state to determine if the drone should make measurements (and in which direction) or move
+		state Decision
+			do
+				-- Repeat last known command. Should be stop.
+				command = last command;
+				-- Robot head should in the middle position
+				head_command = H_MIDDLE;
+
+				-- Assign flags their last known values for decision making
+				right = last right;
+				left = last left;
+
+				-- Routine not done, but still have to assign value to ok because it is part of output
+				ok = false;
+
+				-- Decide what to do
+				until left = false continue Left -- If the left flag is false, then the robot has not measured the left side
+				| right = false continue Right -- If the right flag is false, then the robot has not measured the right side
+				| right and left then Move -- If both are true, then the robot should move
+
+		-- Measurement state to take measurements of specific direction
+		state Measure
+			do
+				-- Repeat last known command. Should be stop.
+				command = last command;
+				-- Maintain last known head position. Depends on the direction.
+				head_command = last head_command;
+
+				-- Remember last known values of right and left because it has to be carried back to the Decision state
+				right = last right;
+				left = last left;
+
+				-- Routine is still not done
+				ok = false;
+
+				-- Store distance values
+				distance_r = 0 -> if (head_command = H_RIGHT) then sensor_3 else last distance_r; -- If the command was right then the robot must be facing right and it should measure the distance at that direction, else keep last value
+				distance_l = 0 -> if (head_command = H_LEFT) then sensor_3 else last distance_l; -- If the command was left then the robot must be facing left and it should measure the distance at that direction, else keep last value
+
+				-- Wait for a duration assigned in globals.ept for measurement before deciding again
+				timer = 0 -> last timer + 1;
+				until timer >= distance_measure_duration continue Decision
+
+		-- State to turn robot head to the left by 45 degrees
+		state Left
+			do
+				-- Keep last known front motor command, should be Stop
+				command = last command;
+				-- Send command to turn the head left by 45 degrees
+				head_command = H_LEFT;
+
+				-- Assign left flag to be true to signal that robot is facing left
+				left = true;
+				-- Recall last value of right
+				right = last right;
+
+				-- Routine is still not done
+				ok = false;
+
+				-- Make sure to reset timer
+				timer = 0;
+				until left continue Measure -- Start measurement
+		
+		-- State to turn robot head to the right by 45 degrees
+		state Right
+			do
+
+				-- Keep last known front motor command, should be Stop
+				command = last command;
+				-- Send command to turn the head right by 45 degrees
+				head_command = H_RIGHT;
+
+				-- Recall last value of right
+				left = last left;
+				-- Assign right flag to be true to signal that robot is facing right
+				right = true;
+
+				-- Routine is still not done
+				ok = false;
+
+				-- Make sure to reset timer
+				timer = 0;
+				until right continue Measure -- Start measurement
+
+		-- State to tell the robot should move to correct direction
+		state Move
+			do
+				-- If the distance measured to the right is larger, it should go to the right, otherwise left
+				command = if distance_r > distance_l then RIGHT else LEFT;
+				-- Head should be facing middle
+				head_command = H_MIDDLE;
+				
+				-- Reset all flags
+				right = false;
+				left  = false;
+
+				-- Routine is still not done
+				ok = false;
+
+				-- Wait until robot is done moving based on duration assigned in globals.ept
+				timer = 0 -> last timer + 1;
+				until timer >= turn_duration then Done -- Routine should go to the done state
+		
+		state Done
+			do
+				-- Drone should stop after turning
+				command = STOP;
+				-- Head should be in the middle (default operational position)
+				head_command = H_MIDDLE;
+
+				-- Rotine is done
+				ok = true;
+
+				-- Restart routine the ultrasonic sensor measures a nearby obstacle
+				until sensor_3 <= contact_distance_US then Stop
+	end
+tel
+
+(* END *)
+
+(*----------------------------------------------------------------------------*)
+(*------------------------------------------------------------------------------
+-- Main node
+--------------------------------------------------------------------------------
+-- Inputs:
+--   sensors 1 to 4 (from ports IN1 to IN4)
+--   speed of motors A to B (from ports OUTA to OUTD)
+-- Assumption:
+--   sensor_1 = right touch sensor
+--   sensor_4 = left touch sensor
+--   sensor_2 = color sensor
+--   sensor_3 = utrasonic sensor or infrared sensor
+--   motor_speed_sensor_a = speed of motor A (right wheel)
+--   motor_speed_sensor_b = speed of motor B (left wheel)
+--   motor_speed_sensor_b = speed of motor C (engine to turn the ultrasonic sensor right and left)
+--   no motor on output port D
+------------------------------------------------------------------------------*)
+node main_robot (
+		sensor_1 : bool ;
+		sensor_2 : int ;
+		sensor_3 : int ;
+		sensor_4 : bool ;
+		motor_speed_sensor_A : int ;
+		motor_speed_sensor_B : int ;
+		motor_speed_sensor_C : int ;
+		motor_speed_sensor_D : int ;
+		)
+(*------------------------------------------------------------------------------
+-- Outputs:
+--   Required rotation direction for each motor (clockwise versus counterclockwise)
+--   Required command mode for each motor (speed versus position)
+--   Required value of the command for each motor
+-- Assumption
+--   Motor_A = right wheel
+--   Motor_B = left wheel
+--   Motor_C = engine to turn the ultrasonic sensor right and left
+--   no motor on output port D
+------------------------------------------------------------------------------*)
+returns (
+	clockwise_A : bool; counterclockwise_A : bool; cmd_position_A : bool ; cmd_speed_A : bool; value_A : int; 
+	clockwise_B : bool; counterclockwise_B : bool; cmd_position_B : bool ; cmd_speed_B : bool; value_B : int; 
+	clockwise_C : bool; counterclockwise_C : bool; cmd_position_C : bool ; cmd_speed_C : bool; value_C : int; 
+	clockwise_D : bool; counterclockwise_D : bool; cmd_position_D : bool ; cmd_speed_D : bool; value_D : int; 
+	);
+
+(*----------------------------------------------------------------------------*)
+-- USER ADDED VARIABLES
+var m3_cmd : wheel_command; -- variable to store wheel command output for node m3, because the node produces two outputs
+	m3_ok : bool; -- variable to node m3 routine completion flag, because the node produces two outputs
+	m4_hcmd : head_position; -- variable to store head command output for node m4, because the node produces two outputs
+	m4_cmd : wheel_command; -- variable to store wheel command output for node m4, because the node produces two outputs
+	m4_ok : bool; -- variable to node m4 routine completion flag, because the node produces two outputs
+
+(*----------------------------------------------------------------------------*)
+(* -- Program starts here -- *)
+let
+(* -- Initiate constants here -- *)
+(* Motors A and B are commanded by speed and not by position *)
+cmd_position_A = false;
+cmd_position_B = false;
+cmd_speed_A = true;
+cmd_speed_B = true;		
+
+(* Motor C is commanded by position and not by speed *)
+cmd_position_C = true;
+cmd_speed_C = false;
+
+(* Motor D does not exist, but order is needed *)
+clockwise_D = false;
+counterclockwise_D = false;
+cmd_position_D = false;
+cmd_speed_D = false;
+value_D = 0;
+
+(* -- Program starts here -- *)
+	automaton
+
+		-- Default state of the robot to execture routine by node m1
+		state M1
+			do 
+				-- Assign values to internaval variables used by other nodes and not used in this state. Necessary otherwise unbound error.
+				m3_cmd = STOP;
+				m3_ok = false;
+				m4_cmd = STOP;
+				m4_ok = false;
+
+				m4_hcmd = H_MIDDLE; -- Should be middle because it is the operation position and is read in this state
+
+				-- Call M1 if there are no obstacles
+				(clockwise_A, counterclockwise_A, value_A, clockwise_B, counterclockwise_B, value_B) = command(m1());
+				-- Command of head position
+				(clockwise_C, counterclockwise_C, value_C) = head_cmd(m4_hcmd);
+
+				-- Check for interruptions
+				until m2 (sensor_2) then M2 -- Check status of colour sensor
+				| sensor_1 or sensor_4 then M3 -- Check if touch sensors collided
+				| sensor_3 <= contact_distance_US then M4 -- Check if a nearby obstacle is detected
+		
+		-- Interrupted state if colour sensor detects dark surface or is blocked
+		state M2
+			do
+				-- Assign values to internaval variables used by other nodes and not used in this state. Necessary otherwise unbound error.
+				m3_cmd = STOP;
+				m3_ok = false;
+				m4_cmd = STOP;
+				m4_ok = false;
+
+				m4_hcmd = H_MIDDLE; -- Should be middle because it is the operation position and is read in this state
+
+				-- Call the command to stop the robot because the colour sensor is blocked or detects a dark surface
+				(clockwise_A, counterclockwise_A, value_A, clockwise_B, counterclockwise_B, value_B) = command(STOP);
+				-- Command of head position
+				(clockwise_C, counterclockwise_C, value_C) = head_cmd(m4_hcmd);
+
+				-- Leave state if colour sensor is clear
+				until m2 (sensor_2) = false then M1
+		
+		-- Interrupted state if touch sensors were activated by an obstacle
+		state M3
+			do
+				-- Assign values to internaval variables used by other nodes and not used in this state. Necessary otherwise unbound error.
+				m4_cmd = STOP;
+				m4_ok = false;
+
+				m4_hcmd = H_MIDDLE; -- Should be middle because it is the operation position and is read in this state
+
+				-- Run m3 routine to calculate wheel command and done flag
+				(m3_cmd, m3_ok) = m3(sensor_1, sensor_4, motor_speed_sensor_A, motor_speed_sensor_B);
+				-- Command of front motors
+				(clockwise_A, counterclockwise_A, value_A, clockwise_B, counterclockwise_B, value_B) = command(m3_cmd);
+				-- Command of head position
+				(clockwise_C, counterclockwise_C, value_C) = head_cmd(m4_hcmd);
+
+				-- Leave state once routine is done
+				until m3_ok then M1
+
+		-- Interrupted state if ultrasonic sensors detect a nearby obstacle
+		state M4
+			do
+				-- Assign values to internaval variables used by other nodes and not used in this state. Necessary otherwise unbound error.
+				m3_cmd = STOP;
+				m3_ok = false;
+
+				-- Run m4 routine to calculate wheel command, head command and done flag
+				(m4_cmd, m4_hcmd, m4_ok) = m4(sensor_3, motor_speed_sensor_A, motor_speed_sensor_B);
+				-- Command of head position
+				(clockwise_C, counterclockwise_C, value_C) = head_cmd(m4_hcmd);
+				-- Command of front motors
+				(clockwise_A, counterclockwise_A, value_A, clockwise_B, counterclockwise_B, value_B) = command(m4_cmd);
+
+				-- Leave state once routine is done
+				until m4_ok then M1
+	end
+tel;
+
+(* END *)
+
+(*----------------------------------------------------------------------------*)

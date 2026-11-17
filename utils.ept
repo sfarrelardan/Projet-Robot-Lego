@@ -1,0 +1,27 @@
+
+node rising_edge(x: bool) returns (y:bool);
+let
+    y = x -> (x and not pre x);
+tel
+
+node falling_edge(x: bool) returns (y:bool);
+let
+    y = false -> (not x and pre x);
+tel
+
+node stable (set : bool; d : int) returns (level : bool;)
+var count : int;
+let
+	level = (count>0);
+	count = if set then d
+	      	else if (true -> pre count =0) then 0
+		else (0 -> pre count-1);
+tel
+
+node switch_RS (rst, set : bool) 
+returns (level : bool) ;
+let
+	level = if set then true 
+		else if rst then false
+		else false -> pre(level) ;
+tel

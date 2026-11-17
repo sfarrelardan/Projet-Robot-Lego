@@ -1,0 +1,38 @@
+TARGET = robot_isae
+
+D_BIN = Release
+
+D_H = ./ ../source/ev3 ./lego_robot_c ./globals_c ./utils_c
+LIBS = -lm -lev3dev-c
+
+CFLAGS = $(addprefix -I, $(D_H)) -O2 -std=gnu99 -W -Wall -Wno-comment
+LDFLAGS = -L../lib
+
+CC = arm-linux-gnueabi-gcc
+
+
+OBJECTS = Release/robot_isae.o lego_robot.o globals.o utils.o
+
+.PHONY: default all clean
+
+default: Release/robot_isae
+all: default
+
+%.o: ./lego_robot_c/%.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+%.o: ./utils_c/%.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+%.o: ./globals_c/%.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+Release/%.o: %.c
+	$(CC) $(LDFLAGS) $(CFLAGS) -c $< -o $@
+
+Release/robot_isae: $(OBJECTS)
+	$(CC) $(LDFLAGS) $(addprefix -I, $(D_H)) $(OBJECTS) -Wall $(LIBS) -o $@
+
+clean: 
+	-rm -f $(D_BIN)/*.o
+	-rm -f $(F_BIN)

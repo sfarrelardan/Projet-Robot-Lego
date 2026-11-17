@@ -1,0 +1,39 @@
+HEPTC=heptc -target c
+ADDR=192.168.0.1
+OUT_DIR=src
+HEPT_SRC= globals.ept utils.ept lego_robot.ept
+
+
+SRC_DIRS=$(patsubst %.ept,%_c, $(HEPT_SRC))
+SRC_FILES=$(notdir $(foreach dir,$(SRC_DIRS),$(wildcard $(dir)/*.c)) $(foreach dir,$(SRC_DIRS),$(wildcard $(dir)/*.h)))
+HEPT_SRC_C=$(patsubst %,$(OUT_DIR)/%,$(SRC_FILES))
+
+vpath %.c $(SRC_DIRS)
+vpath %.h $(SRC_DIRS)
+
+src/%.c: %.c
+	cp $^ $@
+
+src/%.h: %.h
+	cp $^ $@
+
+compile: $(HEPT_SRC) 
+	$(HEPTC) $^
+	mkdir -p $(OUT_DIR)
+
+copy_src: $(HEPT_SRC_C) .init_copie_robot 
+	scp $(HEPT_SRC_C) robot@$(ADDR):ev3dev-c/eg/robot_isae/.
+
+.init_copie_robot:
+	touch .init_copie_robot
+	touch pervasives.h
+	scp pervasives.h robot_isae.c robot@$(ADDR):ev3dev-c/eg/robot_isae/.
+
+copy-exec: Release/robot_isae
+	scp Release/robot_isae robot@$(ADDR):ev3dev-c/eg/robot_isae/Release/robot_isae
+
+clean:
+	rm -rf $(SRC_DIRS)
+	- rm -f *.mls *.log *.epci
+	rm -f .init_copie_robot
+	rm -rf $(OUT_DIR)/*

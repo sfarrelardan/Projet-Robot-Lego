@@ -1,0 +1,25 @@
+(*------------------------------------------------------------------------------
+-- Constant values : sensor calibration 
+------------------------------------------------------------------------------*)
+const dark : int = 10
+
+const contact_distance_IR : int = 50
+const contact_distance_US : int = 200
+const head_front_angle : int = 0
+const head_left_angle : int = -45
+const head_right_angle : int = 45
+
+const forth_wheel_speed : int = 400
+const back_wheel_speed : int = 200
+const turn_wheel_speed : int = 200
+
+const back_duration : int = 30
+const turn_duration : int = 20
+const distance_measure_duration : int = 10
+const max_forth_duration : int = 150
+
+(* User defined types *)
+
+type wheel_command = FORTH | BACK | LEFT | RIGHT | STOP
+
+type head_position = H_LEFT | H_MIDDLE | H_RIGHT
